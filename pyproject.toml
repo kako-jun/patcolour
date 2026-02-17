@@ -1,0 +1,18 @@
+[project]
+name = "patcolour"
+version = "0.1.0"
+description = "Partial color processing - keep specific regions in color, rest in monochrome"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pillow>=11.0.0",
+    "opencv-python-headless>=4.10.0",
+    "numpy>=2.0.0",
+]
+
+[project.scripts]
+patcolour = "patcolour.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.9.8,<0.10.0"]
+build-backend = "uv_build"

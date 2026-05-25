@@ -167,13 +167,27 @@ def main() -> None:
                 print(f"  skip {f.name} (no mask found)", file=sys.stderr)
                 continue
             out_path = out_dir / f"{f.stem}_patcolour.png"
-            apply_partial_color(f, out_path, mask_path=mask_path)
+            apply_partial_color(
+                f,
+                out_path,
+                mask_path=mask_path,
+                rects=args.rect,
+                ellipses=args.ellipse,
+                feather=args.feather,
+                auto_detect=args.auto_detect,
+                sample_point=args.sample,
+                lab_radius=args.lab_radius,
+                sample_point_rel=args.sample_rel,
+                rects_rel=args.rect_rel,
+                ellipses_rel=args.ellipse_rel,
+            )
             print(f"{f.name} -> {out_path.name}")
     else:
         has_color_selection = args.auto_detect or args.sample or args.sample_rel
         if not args.mask and not has_coords and not has_color_selection:
             print(
-                "--mask, --rect/--ellipse, --auto-detect, or --sample is required",
+                "--mask, --rect/--ellipse/--rect-rel/--ellipse-rel, "
+                "--auto-detect, or --sample/--sample-rel is required",
                 file=sys.stderr,
             )
             sys.exit(1)

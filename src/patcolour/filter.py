@@ -6,22 +6,28 @@ import cv2
 import numpy as np
 
 
-def _rel_to_abs_point(rx: float, ry: float, width: int, height: int) -> tuple[int, int]:
+def rel_to_abs_point(rx: float, ry: float, width: int, height: int) -> tuple[int, int]:
     """Convert relative (0.0–1.0) point to absolute pixel coordinates."""
     return (round(rx * width), round(ry * height))
 
 
-def _rel_to_abs_rect(
+def rel_to_abs_rect(
     rx: float, ry: float, rw: float, rh: float, width: int, height: int
 ) -> tuple[int, int, int, int]:
-    """Convert relative rect to absolute (x, y, w, h)."""
+    """Convert relative rect to absolute (x, y, w, h).
+
+    rx/rw are scaled by width; ry/rh are scaled by height.
+    """
     return (round(rx * width), round(ry * height), round(rw * width), round(rh * height))
 
 
-def _rel_to_abs_ellipse(
+def rel_to_abs_ellipse(
     rcx: float, rcy: float, rrx: float, rry: float, width: int, height: int
 ) -> tuple[int, int, int, int]:
-    """Convert relative ellipse to absolute (cx, cy, rx, ry)."""
+    """Convert relative ellipse to absolute (cx, cy, rx, ry).
+
+    rcx/rrx are scaled by width; rcy/rry are scaled by height.
+    """
     return (round(rcx * width), round(rcy * height), round(rrx * width), round(rry * height))
 
 
@@ -157,12 +163,12 @@ def apply_partial_color(
 
     # Convert relative coordinates to absolute and merge
     if sample_point_rel is not None:
-        sample_point = _rel_to_abs_point(sample_point_rel[0], sample_point_rel[1], w, h)
+        sample_point = rel_to_abs_point(sample_point_rel[0], sample_point_rel[1], w, h)
     if rects_rel:
-        abs_rects = [_rel_to_abs_rect(*r, w, h) for r in rects_rel]
+        abs_rects = [rel_to_abs_rect(*r, w, h) for r in rects_rel]
         rects = list(rects) + abs_rects if rects else abs_rects
     if ellipses_rel:
-        abs_ellipses = [_rel_to_abs_ellipse(*e, w, h) for e in ellipses_rel]
+        abs_ellipses = [rel_to_abs_ellipse(*e, w, h) for e in ellipses_rel]
         ellipses = list(ellipses) + abs_ellipses if ellipses else abs_ellipses
 
     if mask_path is not None:

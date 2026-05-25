@@ -4,13 +4,13 @@ import cv2
 import numpy as np
 
 from patcolour.filter import (
-    _rel_to_abs_ellipse,
-    _rel_to_abs_point,
-    _rel_to_abs_rect,
     apply_partial_color,
     detect_color_mask,
     detect_sample_color_mask,
     generate_region_mask,
+    rel_to_abs_ellipse,
+    rel_to_abs_point,
+    rel_to_abs_rect,
 )
 
 
@@ -71,52 +71,52 @@ def test_detect_sample_color_mask_matches_similar_hue() -> None:
 
 
 # ---------------------------------------------------------------------------
-# _rel_to_abs_point / _rel_to_abs_rect / _rel_to_abs_ellipse unit tests
+# rel_to_abs_point / rel_to_abs_rect / rel_to_abs_ellipse unit tests
 # ---------------------------------------------------------------------------
 
 
-def test_rel_to_abs_point_center() -> None:
-    assert _rel_to_abs_point(0.5, 0.5, 100, 200) == (50, 100)
+def testrel_to_abs_point_center() -> None:
+    assert rel_to_abs_point(0.5, 0.5, 100, 200) == (50, 100)
 
 
-def test_rel_to_abs_rect_quarter() -> None:
-    assert _rel_to_abs_rect(0.25, 0.25, 0.5, 0.5, 100, 200) == (25, 50, 50, 100)
+def testrel_to_abs_rect_quarter() -> None:
+    assert rel_to_abs_rect(0.25, 0.25, 0.5, 0.5, 100, 200) == (25, 50, 50, 100)
 
 
-def test_rel_to_abs_ellipse_half() -> None:
-    assert _rel_to_abs_ellipse(0.5, 0.5, 0.25, 0.25, 100, 200) == (50, 100, 25, 50)
+def testrel_to_abs_ellipse_half() -> None:
+    assert rel_to_abs_ellipse(0.5, 0.5, 0.25, 0.25, 100, 200) == (50, 100, 25, 50)
 
 
-def test_rel_to_abs_point_origin() -> None:
-    assert _rel_to_abs_point(0.0, 0.0, 100, 200) == (0, 0)
+def testrel_to_abs_point_origin() -> None:
+    assert rel_to_abs_point(0.0, 0.0, 100, 200) == (0, 0)
 
 
-def test_rel_to_abs_point_max() -> None:
-    assert _rel_to_abs_point(1.0, 1.0, 100, 200) == (100, 200)
+def testrel_to_abs_point_max() -> None:
+    assert rel_to_abs_point(1.0, 1.0, 100, 200) == (100, 200)
 
 
-def test_rel_to_abs_rect_full_image() -> None:
-    result = _rel_to_abs_rect(0.0, 0.0, 1.0, 1.0, 80, 60)
+def testrel_to_abs_rect_full_image() -> None:
+    result = rel_to_abs_rect(0.0, 0.0, 1.0, 1.0, 80, 60)
     assert result == (0, 0, 80, 60)
 
 
-def test_rel_to_abs_point_rounding() -> None:
+def testrel_to_abs_point_rounding() -> None:
     # 1/3 of 10 = 3.333... → rounds to 3
-    x, y = _rel_to_abs_point(1 / 3, 2 / 3, 10, 10)
+    x, y = rel_to_abs_point(1 / 3, 2 / 3, 10, 10)
     assert x == round(1 / 3 * 10)
     assert y == round(2 / 3 * 10)
 
 
-def test_rel_to_abs_point_resolution_independent() -> None:
-    x1, y1 = _rel_to_abs_point(0.5, 0.5, 100, 100)
-    x2, y2 = _rel_to_abs_point(0.5, 0.5, 200, 200)
+def testrel_to_abs_point_resolution_independent() -> None:
+    x1, y1 = rel_to_abs_point(0.5, 0.5, 100, 100)
+    x2, y2 = rel_to_abs_point(0.5, 0.5, 200, 200)
     assert x1 / 100 == x2 / 200
     assert y1 / 100 == y2 / 200
 
 
-def test_rel_to_abs_rect_non_square_image() -> None:
+def testrel_to_abs_rect_non_square_image() -> None:
     # rx and ry must scale independently
-    x, y, w, h = _rel_to_abs_rect(0.5, 0.5, 0.5, 0.5, 100, 50)
+    x, y, w, h = rel_to_abs_rect(0.5, 0.5, 0.5, 0.5, 100, 50)
     assert x == 50
     assert y == 25
     assert w == 50

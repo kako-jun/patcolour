@@ -128,6 +128,32 @@ def generate_region_mask(
     return _apply_feather(mask, feather)
 
 
+def generate_exclude_mask(
+    height: int,
+    width: int,
+    rects: list[tuple[int, int, int, int]] | None = None,
+    ellipses: list[tuple[int, int, int, int]] | None = None,
+) -> np.ndarray:
+    """Generate an exclusion mask from coordinate regions.
+
+    Returns:
+        Binary mask where 255 = exclude (suppress color here).
+    """
+    mask = np.zeros((height, width), dtype=np.uint8)
+
+    if rects:
+        for x, y, w, h in rects:
+            x1, y1 = max(0, x), max(0, y)
+            x2, y2 = min(width, x + w), min(height, y + h)
+            mask[y1:y2, x1:x2] = 255
+
+    if ellipses:
+        for cx, cy, rx, ry in ellipses:
+            cv2.ellipse(mask, (cx, cy), (rx, ry), 0, 0, 360, 255, -1)
+
+    return mask
+
+
 def apply_partial_color(
     input_path: Path,
     output_path: Path,
@@ -141,6 +167,10 @@ def apply_partial_color(
     sample_point_rel: tuple[float, float] | None = None,
     rects_rel: list[tuple[float, float, float, float]] | None = None,
     ellipses_rel: list[tuple[float, float, float, float]] | None = None,
+    exclude_rects: list[tuple[int, int, int, int]] | None = None,
+    exclude_ellipses: list[tuple[int, int, int, int]] | None = None,
+    exclude_rects_rel: list[tuple[float, float, float, float]] | None = None,
+    exclude_ellipses_rel: list[tuple[float, float, float, float]] | None = None,
 ) -> None:
     """Apply partial color effect.
 
@@ -170,6 +200,14 @@ def apply_partial_color(
     if ellipses_rel:
         abs_ellipses = [rel_to_abs_ellipse(*e, w, h) for e in ellipses_rel]
         ellipses = list(ellipses) + abs_ellipses if ellipses else abs_ellipses
+    if exclude_rects_rel:
+        abs_excl_rects = [rel_to_abs_rect(*r, w, h) for r in exclude_rects_rel]
+        exclude_rects = list(exclude_rects) + abs_excl_rects if exclude_rects else abs_excl_rects
+    if exclude_ellipses_rel:
+        abs_excl_ellipses = [rel_to_abs_ellipse(*e, w, h) for e in exclude_ellipses_rel]
+        exclude_ellipses = (
+            list(exclude_ellipses) + abs_excl_ellipses if exclude_ellipses else abs_excl_ellipses
+        )
 
     if mask_path is not None:
         mask = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
@@ -193,6 +231,12 @@ def apply_partial_color(
             mask = color_mask
     else:
         mask = generate_region_mask(h, w, rects, ellipses, feather)
+
+    # Apply exclude mask: exclude always wins over positive
+    has_exclude = exclude_rects or exclude_ellipses
+    if has_exclude:
+        excl_mask = generate_exclude_mask(h, w, exclude_rects, exclude_ellipses)
+        mask = cv2.bitwise_and(mask, cv2.bitwise_not(excl_mask))
 
     # Create monochrome version
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)

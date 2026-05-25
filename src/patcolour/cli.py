@@ -138,6 +138,34 @@ def main() -> None:
         help="Ellipse region in relative coordinates (0.0–1.0). Repeatable.",
     )
     parser.add_argument(
+        "--exclude-rect",
+        type=_parse_rect,
+        action="append",
+        metavar="x,y,w,h",
+        help="Rectangle region to exclude from color (repeatable)",
+    )
+    parser.add_argument(
+        "--exclude-ellipse",
+        type=_parse_ellipse,
+        action="append",
+        metavar="cx,cy,rx,ry",
+        help="Ellipse region to exclude from color (repeatable)",
+    )
+    parser.add_argument(
+        "--exclude-rect-rel",
+        type=_parse_rect_rel,
+        action="append",
+        metavar="rx,ry,rw,rh",
+        help="Exclude rectangle in relative coordinates (0.0–1.0). Repeatable.",
+    )
+    parser.add_argument(
+        "--exclude-ellipse-rel",
+        type=_parse_ellipse_rel,
+        action="append",
+        metavar="rcx,rcy,rrx,rry",
+        help="Exclude ellipse in relative coordinates (0.0–1.0). Repeatable.",
+    )
+    parser.add_argument(
         "--feather",
         type=int,
         default=0,
@@ -146,7 +174,16 @@ def main() -> None:
     parser.add_argument("-o", "--output", type=Path, help="Output path")
 
     args = parser.parse_args()
-    has_coords = args.rect or args.ellipse or args.rect_rel or args.ellipse_rel
+    has_coords = (
+        args.rect
+        or args.ellipse
+        or args.rect_rel
+        or args.ellipse_rel
+        or args.exclude_rect
+        or args.exclude_ellipse
+        or args.exclude_rect_rel
+        or args.exclude_ellipse_rel
+    )
 
     if args.input.is_dir():
         if not args.mask_dir:
@@ -180,6 +217,10 @@ def main() -> None:
                 sample_point_rel=args.sample_rel,
                 rects_rel=args.rect_rel,
                 ellipses_rel=args.ellipse_rel,
+                exclude_rects=args.exclude_rect,
+                exclude_ellipses=args.exclude_ellipse,
+                exclude_rects_rel=args.exclude_rect_rel,
+                exclude_ellipses_rel=args.exclude_ellipse_rel,
             )
             print(f"{f.name} -> {out_path.name}")
     else:
@@ -205,6 +246,10 @@ def main() -> None:
             sample_point_rel=args.sample_rel,
             rects_rel=args.rect_rel,
             ellipses_rel=args.ellipse_rel,
+            exclude_rects=args.exclude_rect,
+            exclude_ellipses=args.exclude_ellipse,
+            exclude_rects_rel=args.exclude_rect_rel,
+            exclude_ellipses_rel=args.exclude_ellipse_rel,
         )
         print(f"{args.input.name} -> {out_path.name}")
 

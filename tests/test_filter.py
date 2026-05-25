@@ -7,6 +7,7 @@ from patcolour.filter import (
     apply_partial_color,
     detect_color_mask,
     detect_sample_color_mask,
+    generate_exclude_mask,
     generate_region_mask,
     rel_to_abs_ellipse,
     rel_to_abs_point,
@@ -190,7 +191,8 @@ def test_apply_partial_color_rel_none_does_not_change_behavior(tmp_path: Path) -
 
     # abs rect covers top-left 5×5
     apply_partial_color(
-        input_path, output_path,
+        input_path,
+        output_path,
         rects=[(0, 0, 5, 5)],
         rects_rel=None,
         ellipses_rel=None,
@@ -213,7 +215,8 @@ def test_apply_partial_color_rect_rel_and_abs_are_unioned(tmp_path: Path) -> Non
 
     # abs covers top-left, rel covers bottom-right
     apply_partial_color(
-        input_path, output_path,
+        input_path,
+        output_path,
         rects=[(0, 0, 20, 20)],
         rects_rel=[(0.75, 0.75, 0.25, 0.25)],
     )
@@ -236,7 +239,8 @@ def test_apply_partial_color_ellipse_rel_and_abs_are_unioned(tmp_path: Path) -> 
 
     # abs ellipse center top-left; rel ellipse center bottom-right
     apply_partial_color(
-        input_path, output_path,
+        input_path,
+        output_path,
         ellipses=[(10, 10, 8, 8)],
         ellipses_rel=[(0.9, 0.9, 0.08, 0.08)],
     )
@@ -273,7 +277,8 @@ def test_apply_partial_color_sample_rel_overrides_sample_point(tmp_path: Path) -
 
     # sample_point_rel points to center green; abs sample_point points to red corner
     apply_partial_color(
-        input_path, output_path,
+        input_path,
+        output_path,
         sample_point=(5, 5),
         sample_point_rel=(0.5, 0.5),
         lab_radius=30.0,
@@ -297,3 +302,207 @@ def test_apply_partial_color_rect_rel_same_region_across_resolutions(tmp_path: P
         cx = size // 2
         center_pixel = result[cx, cx]
         assert int(center_pixel[2]) != int(center_pixel[1]), f"Failed for size={size}"
+
+
+# ---------------------------------------------------------------------------
+# generate_exclude_mask tests
+# ---------------------------------------------------------------------------
+
+
+def test_generate_exclude_mask_rect() -> None:
+    mask = generate_exclude_mask(10, 10, rects=[(2, 2, 4, 4)])
+
+    # Interior of rect should be excluded (255)
+    assert mask[4, 4] == 255
+    # Outside rect should be zero
+    assert mask[0, 0] == 0
+    assert mask[9, 9] == 0
+
+
+def test_generate_exclude_mask_ellipse() -> None:
+    mask = generate_exclude_mask(20, 20, ellipses=[(10, 10, 4, 4)])
+
+    # Center of ellipse should be excluded
+    assert mask[10, 10] == 255
+    # Far corner should not be excluded
+    assert mask[0, 0] == 0
+
+
+def test_generate_exclude_mask_empty() -> None:
+    mask = generate_exclude_mask(8, 8, rects=None, ellipses=None)
+
+    assert mask.shape == (8, 8)
+    assert np.all(mask == 0)
+
+
+# ---------------------------------------------------------------------------
+# apply_partial_color — exclude argument tests
+# ---------------------------------------------------------------------------
+
+
+def test_apply_partial_color_exclude_rect_suppresses_color(tmp_path: Path) -> None:
+    # Solid red image; positive rect covers whole image; exclude rect covers center.
+    img = _solid_color_image(10, 10, (0, 0, 200))
+    input_path = tmp_path / "input.png"
+    output_path = tmp_path / "output.png"
+    _write_image(input_path, img)
+
+    # positive: whole image; exclude: center 4x4
+    apply_partial_color(
+        input_path,
+        output_path,
+        rects=[(0, 0, 10, 10)],
+        exclude_rects=[(3, 3, 4, 4)],
+    )
+    result = cv2.imread(str(output_path))
+
+    assert result is not None
+    # Excluded center pixel → monochrome (all channels equal)
+    assert result[5, 5, 0] == result[5, 5, 1] == result[5, 5, 2]
+    # Non-excluded corner → colored (R channel > G/B for red image)
+    assert int(result[0, 0, 2]) != int(result[0, 0, 1])
+
+
+def test_apply_partial_color_exclude_ellipse_suppresses_color(tmp_path: Path) -> None:
+    img = _solid_color_image(20, 20, (0, 0, 200))
+    input_path = tmp_path / "input.png"
+    output_path = tmp_path / "output.png"
+    _write_image(input_path, img)
+
+    apply_partial_color(
+        input_path,
+        output_path,
+        rects=[(0, 0, 20, 20)],
+        exclude_ellipses=[(10, 10, 4, 4)],
+    )
+    result = cv2.imread(str(output_path))
+
+    assert result is not None
+    # Center of ellipse → monochrome
+    assert result[10, 10, 0] == result[10, 10, 1] == result[10, 10, 2]
+    # Outside ellipse → still colored
+    assert int(result[0, 0, 2]) != int(result[0, 0, 1])
+
+
+def test_apply_partial_color_exclude_rect_rel_suppresses_color(tmp_path: Path) -> None:
+    img = _solid_color_image(100, 100, (0, 0, 200))
+    input_path = tmp_path / "input.png"
+    output_path = tmp_path / "output.png"
+    _write_image(input_path, img)
+
+    # positive: full image; exclude_rects_rel: center quarter
+    apply_partial_color(
+        input_path,
+        output_path,
+        rects=[(0, 0, 100, 100)],
+        exclude_rects_rel=[(0.25, 0.25, 0.5, 0.5)],
+    )
+    result = cv2.imread(str(output_path))
+
+    assert result is not None
+    # Center (inside excluded rel rect) → monochrome
+    assert result[50, 50, 0] == result[50, 50, 1] == result[50, 50, 2]
+    # Corner (outside excluded) → colored
+    assert int(result[0, 0, 2]) != int(result[0, 0, 1])
+
+
+def test_apply_partial_color_exclude_does_not_affect_outside_positive(tmp_path: Path) -> None:
+    # positive: top-left 5x5 only; exclude: bottom-right corner (outside positive).
+    # The bottom-right should be monochrome regardless (it's outside positive already).
+    img = _solid_color_image(10, 10, (0, 0, 200))
+    input_path = tmp_path / "input.png"
+    output_path = tmp_path / "output.png"
+    _write_image(input_path, img)
+
+    apply_partial_color(
+        input_path,
+        output_path,
+        rects=[(0, 0, 5, 5)],
+        exclude_rects=[(7, 7, 3, 3)],
+    )
+    result = cv2.imread(str(output_path))
+
+    assert result is not None
+    # Bottom-right (outside positive) → monochrome, same as without exclude
+    assert result[9, 9, 0] == result[9, 9, 1] == result[9, 9, 2]
+    # Top-left (inside positive, not excluded) → colored
+    assert int(result[2, 2, 2]) != int(result[2, 2, 1])
+
+
+def test_apply_partial_color_exclude_none_does_not_change_behavior(tmp_path: Path) -> None:
+    img = _solid_color_image(10, 10, (0, 0, 200))
+    input_path = tmp_path / "input.png"
+    output_path_with_none = tmp_path / "output_none.png"
+    output_path_without = tmp_path / "output_without.png"
+    _write_image(input_path, img)
+
+    apply_partial_color(
+        input_path,
+        output_path_with_none,
+        rects=[(0, 0, 5, 5)],
+        exclude_rects=None,
+        exclude_ellipses=None,
+        exclude_rects_rel=None,
+        exclude_ellipses_rel=None,
+    )
+    apply_partial_color(
+        input_path,
+        output_path_without,
+        rects=[(0, 0, 5, 5)],
+    )
+
+    result_none = cv2.imread(str(output_path_with_none))
+    result_without = cv2.imread(str(output_path_without))
+
+    assert result_none is not None
+    assert result_without is not None
+    np.testing.assert_array_equal(result_none, result_without)
+
+
+def test_apply_partial_color_exclude_wins_over_positive_at_overlap(tmp_path: Path) -> None:
+    # positive and exclude both cover the entire image → exclude wins → full monochrome
+    img = _solid_color_image(10, 10, (0, 0, 200))
+    input_path = tmp_path / "input.png"
+    output_path = tmp_path / "output.png"
+    _write_image(input_path, img)
+
+    apply_partial_color(
+        input_path,
+        output_path,
+        rects=[(0, 0, 10, 10)],
+        exclude_rects=[(0, 0, 10, 10)],
+    )
+    result = cv2.imread(str(output_path))
+
+    assert result is not None
+    # All pixels must be monochrome
+    for y in (0, 5, 9):
+        for x in (0, 5, 9):
+            assert result[y, x, 0] == result[y, x, 1] == result[y, x, 2], (
+                f"pixel [{y},{x}] is not monochrome: {result[y, x]}"
+            )
+
+
+def test_apply_partial_color_exclude_rel_and_abs_are_unioned(tmp_path: Path) -> None:
+    # positive: full image; exclude_rects: top-left 3x3; exclude_rects_rel: bottom-right corner.
+    img = _solid_color_image(10, 10, (0, 0, 200))
+    input_path = tmp_path / "input.png"
+    output_path = tmp_path / "output.png"
+    _write_image(input_path, img)
+
+    apply_partial_color(
+        input_path,
+        output_path,
+        rects=[(0, 0, 10, 10)],
+        exclude_rects=[(0, 0, 3, 3)],
+        exclude_rects_rel=[(0.7, 0.7, 0.3, 0.3)],
+    )
+    result = cv2.imread(str(output_path))
+
+    assert result is not None
+    # Top-left corner (abs exclude) → monochrome
+    assert result[1, 1, 0] == result[1, 1, 1] == result[1, 1, 2]
+    # Bottom-right corner (rel exclude) → monochrome
+    assert result[9, 9, 0] == result[9, 9, 1] == result[9, 9, 2]
+    # Middle (not excluded) → colored
+    assert int(result[5, 5, 2]) != int(result[5, 5, 1])

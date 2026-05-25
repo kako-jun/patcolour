@@ -1,6 +1,13 @@
 import pytest
 
-from patcolour.cli import _parse_ellipse, _parse_ellipse_rel, _parse_point, _parse_point_rel, _parse_rect, _parse_rect_rel
+from patcolour.cli import (
+    _parse_ellipse,
+    _parse_ellipse_rel,
+    _parse_point,
+    _parse_point_rel,
+    _parse_rect,
+    _parse_rect_rel,
+)
 
 
 def test_parse_rect() -> None:

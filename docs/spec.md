@@ -87,7 +87,8 @@ Repeatable.
 
 ### `--exclude-ellipse cx,cy,rx,ry`
 
-Adds an elliptical region to explicitly exclude from color output.
+Adds an elliptical region to explicitly exclude from color output. Always applied with hard edges
+regardless of `--feather`.
 
 Repeatable.
 
@@ -129,6 +130,10 @@ final = positive AND NOT exclude
 Exclude regions always win over positive/color-distance/region selections, regardless of how the
 positive mask was generated (`--mask`, `--rect`, `--ellipse`, `--auto-detect`, `--sample`, or any
 combination thereof).
+
+When `--mask` is used, the mask may contain soft/intermediate values (0–255). Exclude regions
+still apply with hard edges; pixels inside an exclude region are set to fully monochrome (mask=0)
+regardless of the original mask value at that location.
 
 This combination is intentional. A color-based candidate set often needs human spatial
 guidance to become the intended subject.

@@ -94,6 +94,28 @@ def detect_sample_color_mask(
     return mask
 
 
+def _draw_regions(
+    height: int,
+    width: int,
+    rects: list[tuple[int, int, int, int]] | None,
+    ellipses: list[tuple[int, int, int, int]] | None,
+) -> np.ndarray:
+    """Draw rects and ellipses onto a blank mask. Internal helper."""
+    mask = np.zeros((height, width), dtype=np.uint8)
+
+    if rects:
+        for x, y, w, h in rects:
+            x1, y1 = max(0, x), max(0, y)
+            x2, y2 = min(width, x + w), min(height, y + h)
+            mask[y1:y2, x1:x2] = 255
+
+    if ellipses:
+        for cx, cy, rx, ry in ellipses:
+            cv2.ellipse(mask, (cx, cy), (rx, ry), 0, 0, 360, 255, -1)
+
+    return mask
+
+
 def generate_region_mask(
     height: int,
     width: int,
@@ -113,19 +135,7 @@ def generate_region_mask(
     Returns:
         Grayscale mask (0=outside, 255=inside).
     """
-    mask = np.zeros((height, width), dtype=np.uint8)
-
-    if rects:
-        for x, y, w, h in rects:
-            x1, y1 = max(0, x), max(0, y)
-            x2, y2 = min(width, x + w), min(height, y + h)
-            mask[y1:y2, x1:x2] = 255
-
-    if ellipses:
-        for cx, cy, rx, ry in ellipses:
-            cv2.ellipse(mask, (cx, cy), (rx, ry), 0, 0, 360, 255, -1)
-
-    return _apply_feather(mask, feather)
+    return _apply_feather(_draw_regions(height, width, rects, ellipses), feather)
 
 
 def generate_exclude_mask(
@@ -136,22 +146,12 @@ def generate_exclude_mask(
 ) -> np.ndarray:
     """Generate an exclusion mask from coordinate regions.
 
+    Always applied with hard edges regardless of ``--feather``.
+
     Returns:
         Binary mask where 255 = exclude (suppress color here).
     """
-    mask = np.zeros((height, width), dtype=np.uint8)
-
-    if rects:
-        for x, y, w, h in rects:
-            x1, y1 = max(0, x), max(0, y)
-            x2, y2 = min(width, x + w), min(height, y + h)
-            mask[y1:y2, x1:x2] = 255
-
-    if ellipses:
-        for cx, cy, rx, ry in ellipses:
-            cv2.ellipse(mask, (cx, cy), (rx, ry), 0, 0, 360, 255, -1)
-
-    return mask
+    return _draw_regions(height, width, rects, ellipses)
 
 
 def apply_partial_color(

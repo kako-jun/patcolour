@@ -6,6 +6,31 @@ import cv2
 import numpy as np
 
 
+def rel_to_abs_point(rx: float, ry: float, width: int, height: int) -> tuple[int, int]:
+    """Convert relative (0.0–1.0) point to absolute pixel coordinates."""
+    return (round(rx * width), round(ry * height))
+
+
+def rel_to_abs_rect(
+    rx: float, ry: float, rw: float, rh: float, width: int, height: int
+) -> tuple[int, int, int, int]:
+    """Convert relative rect to absolute (x, y, w, h).
+
+    rx/rw are scaled by width; ry/rh are scaled by height.
+    """
+    return (round(rx * width), round(ry * height), round(rw * width), round(rh * height))
+
+
+def rel_to_abs_ellipse(
+    rcx: float, rcy: float, rrx: float, rry: float, width: int, height: int
+) -> tuple[int, int, int, int]:
+    """Convert relative ellipse to absolute (cx, cy, rx, ry).
+
+    rcx/rrx are scaled by width; rcy/rry are scaled by height.
+    """
+    return (round(rcx * width), round(rcy * height), round(rrx * width), round(rry * height))
+
+
 def _apply_feather(mask: np.ndarray, feather: int) -> np.ndarray:
     """Softly blur mask edges when requested."""
     if feather <= 0:
@@ -113,6 +138,9 @@ def apply_partial_color(
     auto_detect: bool = False,
     sample_point: tuple[int, int] | None = None,
     lab_radius: float = 18.0,
+    sample_point_rel: tuple[float, float] | None = None,
+    rects_rel: list[tuple[float, float, float, float]] | None = None,
+    ellipses_rel: list[tuple[float, float, float, float]] | None = None,
 ) -> None:
     """Apply partial color effect.
 
@@ -132,6 +160,16 @@ def apply_partial_color(
         raise ValueError(msg)
 
     h, w = img.shape[:2]
+
+    # Convert relative coordinates to absolute and merge
+    if sample_point_rel is not None:
+        sample_point = rel_to_abs_point(sample_point_rel[0], sample_point_rel[1], w, h)
+    if rects_rel:
+        abs_rects = [rel_to_abs_rect(*r, w, h) for r in rects_rel]
+        rects = list(rects) + abs_rects if rects else abs_rects
+    if ellipses_rel:
+        abs_ellipses = [rel_to_abs_ellipse(*e, w, h) for e in ellipses_rel]
+        ellipses = list(ellipses) + abs_ellipses if ellipses else abs_ellipses
 
     if mask_path is not None:
         mask = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
@@ -164,7 +202,7 @@ def apply_partial_color(
     alpha = mask.astype(np.float32) / 255.0
     alpha = alpha[:, :, np.newaxis]
 
-    result = (img.astype(np.float32) * alpha + mono.astype(np.float32) * (1.0 - alpha))
+    result = img.astype(np.float32) * alpha + mono.astype(np.float32) * (1.0 - alpha)
     result = np.clip(result, 0, 255).astype(np.uint8)
 
     cv2.imwrite(str(output_path), result)

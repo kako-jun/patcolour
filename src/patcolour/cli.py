@@ -25,6 +25,15 @@ def _parse_ellipse(s: str) -> tuple[int, int, int, int]:
     return tuple(int(p) for p in parts)  # type: ignore[return-value]
 
 
+def _parse_point(s: str) -> tuple[int, int]:
+    """Parse 'x,y' string."""
+    parts = s.split(",")
+    if len(parts) != 2:
+        msg = f"point must be x,y: {s}"
+        raise argparse.ArgumentTypeError(msg)
+    return tuple(int(p) for p in parts)  # type: ignore[return-value]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Keep specific regions in color, rest becomes monochrome",
@@ -43,6 +52,19 @@ def main() -> None:
     parser.add_argument(
         "--auto-detect", action="store_true",
         help="Auto-detect colorful regions (HSV). Combine with --rect/--ellipse to limit where.",
+    )
+    parser.add_argument(
+        "--sample",
+        type=_parse_point,
+        metavar="x,y",
+        help=(
+            "Sample a reference color from the input image and keep nearby colors in "
+            "Lab chroma space."
+        ),
+    )
+    parser.add_argument(
+        "--lab-radius", type=float, default=18.0,
+        help="Radius for --sample mode in Lab chroma space (default: 18.0)",
     )
     parser.add_argument(
         "--feather", type=int, default=0,
@@ -75,8 +97,12 @@ def main() -> None:
             apply_partial_color(f, out_path, mask_path=mask_path)
             print(f"{f.name} -> {out_path.name}")
     else:
-        if not args.mask and not has_coords and not args.auto_detect:
-            print("--mask, --rect/--ellipse, or --auto-detect is required", file=sys.stderr)
+        has_color_selection = args.auto_detect or args.sample
+        if not args.mask and not has_coords and not has_color_selection:
+            print(
+                "--mask, --rect/--ellipse, --auto-detect, or --sample is required",
+                file=sys.stderr,
+            )
             sys.exit(1)
         out_path = args.output or args.input.with_stem(f"{args.input.stem}_patcolour")
         apply_partial_color(
@@ -86,6 +112,8 @@ def main() -> None:
             ellipses=args.ellipse,
             feather=args.feather,
             auto_detect=args.auto_detect,
+            sample_point=args.sample,
+            lab_radius=args.lab_radius,
         )
         print(f"{args.input.name} -> {out_path.name}")
 

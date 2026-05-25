@@ -10,9 +10,30 @@ dependencies = [
     "numpy>=2.0.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/kako-jun/patcolour"
+Repository = "https://github.com/kako-jun/patcolour"
+Issues = "https://github.com/kako-jun/patcolour/issues"
+
 [project.scripts]
 patcolour = "patcolour.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.9.8,<0.10.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "ruff>=0.11.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

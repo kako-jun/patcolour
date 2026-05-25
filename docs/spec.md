@@ -150,3 +150,30 @@ guidance to become the intended subject.
 - directory mode without `--mask-dir` exits with status 1
 - single-file mode without any selection mode exits with status 1
 - unreadable input or mask raises an error
+
+## Color-distance modes
+
+Available via `--color-space {lab-chroma,lab-full,lch,xyy}` when using `--sample` or `--sample-rel`.
+
+| Mode | Description |
+|---|---|
+| `lab-chroma` | Lab chroma-only (a+b plane) distance. Default. Robust to brightness variation. |
+| `lab-full` | Full Lab 3D Euclidean distance (L + a + b). Stricter on lightness matching. |
+| `lch` | LCh distance with downweighted lightness (`lightness_weight=0.3`). Hue-aware with circular wrap. |
+| `xyy` | xyY chromaticity distance (x+y only, ignores luminance Y). Purely color-temperature based. |
+
+> Update this section with the chosen default after evaluation.
+
+### `--compare-color-space`
+
+Runs all 4 color-space modes on a single image and saves:
+
+- `{stem}_cs_lab-chroma.png`
+- `{stem}_cs_lab-full.png`
+- `{stem}_cs_lch.png`
+- `{stem}_cs_xyy.png`
+- `{stem}_cs_compare.png` — horizontal 4-column collage (max 4000px wide)
+
+Requires `--sample` or `--sample-rel`. Not available in batch (directory) mode.
+
+When `--compare-color-space` and `--color-space` are both specified, `--compare-color-space` takes priority.

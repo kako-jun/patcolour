@@ -34,6 +34,48 @@ def _parse_point(s: str) -> tuple[int, int]:
     return tuple(int(p) for p in parts)  # type: ignore[return-value]
 
 
+def _parse_point_rel(s: str) -> tuple[float, float]:
+    """Parse 'x,y' as relative 0.0–1.0 floats."""
+    parts = s.split(",")
+    if len(parts) != 2:
+        msg = f"point must be rx,ry: {s}"
+        raise argparse.ArgumentTypeError(msg)
+    vals = tuple(float(p) for p in parts)
+    for v in vals:
+        if not (0.0 <= v <= 1.0):
+            msg = f"relative values must be in range 0.0–1.0, got {v}"
+            raise argparse.ArgumentTypeError(msg)
+    return vals  # type: ignore[return-value]
+
+
+def _parse_rect_rel(s: str) -> tuple[float, float, float, float]:
+    """Parse 'x,y,w,h' as relative 0.0–1.0 floats."""
+    parts = s.split(",")
+    if len(parts) != 4:
+        msg = f"rect-rel must be rx,ry,rw,rh: {s}"
+        raise argparse.ArgumentTypeError(msg)
+    vals = tuple(float(p) for p in parts)
+    for v in vals:
+        if not (0.0 <= v <= 1.0):
+            msg = f"relative values must be in range 0.0–1.0, got {v}"
+            raise argparse.ArgumentTypeError(msg)
+    return vals  # type: ignore[return-value]
+
+
+def _parse_ellipse_rel(s: str) -> tuple[float, float, float, float]:
+    """Parse 'cx,cy,rx,ry' as relative 0.0–1.0 floats."""
+    parts = s.split(",")
+    if len(parts) != 4:
+        msg = f"ellipse-rel must be rcx,rcy,rrx,rry: {s}"
+        raise argparse.ArgumentTypeError(msg)
+    vals = tuple(float(p) for p in parts)
+    for v in vals:
+        if not (0.0 <= v <= 1.0):
+            msg = f"relative values must be in range 0.0–1.0, got {v}"
+            raise argparse.ArgumentTypeError(msg)
+    return vals  # type: ignore[return-value]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Keep specific regions in color, rest becomes monochrome",
@@ -42,15 +84,22 @@ def main() -> None:
     parser.add_argument("--mask", type=Path, help="Mask image (white=color, black=mono)")
     parser.add_argument("--mask-dir", type=Path, help="Directory of mask images (for batch)")
     parser.add_argument(
-        "--rect", type=_parse_rect, action="append", metavar="x,y,w,h",
+        "--rect",
+        type=_parse_rect,
+        action="append",
+        metavar="x,y,w,h",
         help="Rectangle region to keep in color (repeatable)",
     )
     parser.add_argument(
-        "--ellipse", type=_parse_ellipse, action="append", metavar="cx,cy,rx,ry",
+        "--ellipse",
+        type=_parse_ellipse,
+        action="append",
+        metavar="cx,cy,rx,ry",
         help="Ellipse region to keep in color (repeatable)",
     )
     parser.add_argument(
-        "--auto-detect", action="store_true",
+        "--auto-detect",
+        action="store_true",
         help="Auto-detect colorful regions (HSV). Combine with --rect/--ellipse to limit where.",
     )
     parser.add_argument(
@@ -63,17 +112,41 @@ def main() -> None:
         ),
     )
     parser.add_argument(
-        "--lab-radius", type=float, default=18.0,
+        "--lab-radius",
+        type=float,
+        default=18.0,
         help="Radius for --sample mode in Lab chroma space (default: 18.0)",
     )
     parser.add_argument(
-        "--feather", type=int, default=0,
+        "--sample-rel",
+        type=_parse_point_rel,
+        metavar="rx,ry",
+        help="Sample a reference color using relative coordinates (0.0–1.0).",
+    )
+    parser.add_argument(
+        "--rect-rel",
+        type=_parse_rect_rel,
+        action="append",
+        metavar="rx,ry,rw,rh",
+        help="Rectangle region in relative coordinates (0.0–1.0). Repeatable.",
+    )
+    parser.add_argument(
+        "--ellipse-rel",
+        type=_parse_ellipse_rel,
+        action="append",
+        metavar="rcx,rcy,rrx,rry",
+        help="Ellipse region in relative coordinates (0.0–1.0). Repeatable.",
+    )
+    parser.add_argument(
+        "--feather",
+        type=int,
+        default=0,
         help="Edge softness in pixels (default: 0 = hard edge)",
     )
     parser.add_argument("-o", "--output", type=Path, help="Output path")
 
     args = parser.parse_args()
-    has_coords = args.rect or args.ellipse
+    has_coords = args.rect or args.ellipse or args.rect_rel or args.ellipse_rel
 
     if args.input.is_dir():
         if not args.mask_dir:
@@ -97,7 +170,7 @@ def main() -> None:
             apply_partial_color(f, out_path, mask_path=mask_path)
             print(f"{f.name} -> {out_path.name}")
     else:
-        has_color_selection = args.auto_detect or args.sample
+        has_color_selection = args.auto_detect or args.sample or args.sample_rel
         if not args.mask and not has_coords and not has_color_selection:
             print(
                 "--mask, --rect/--ellipse, --auto-detect, or --sample is required",
@@ -106,7 +179,8 @@ def main() -> None:
             sys.exit(1)
         out_path = args.output or args.input.with_stem(f"{args.input.stem}_patcolour")
         apply_partial_color(
-            args.input, out_path,
+            args.input,
+            out_path,
             mask_path=args.mask,
             rects=args.rect,
             ellipses=args.ellipse,
@@ -114,6 +188,9 @@ def main() -> None:
             auto_detect=args.auto_detect,
             sample_point=args.sample,
             lab_radius=args.lab_radius,
+            sample_point_rel=args.sample_rel,
+            rects_rel=args.rect_rel,
+            ellipses_rel=args.ellipse_rel,
         )
         print(f"{args.input.name} -> {out_path.name}")
 

@@ -78,6 +78,33 @@ coordinates, making it reusable across different image resolutions.
 
 Repeatable.
 
+### `--exclude-rect x,y,w,h`
+
+Adds a rectangular region to explicitly exclude from color output. Always applied with hard edges
+regardless of `--feather`.
+
+Repeatable.
+
+### `--exclude-ellipse cx,cy,rx,ry`
+
+Adds an elliptical region to explicitly exclude from color output.
+
+Repeatable.
+
+### `--exclude-rect-rel rx,ry,rw,rh`
+
+Relative coordinate variant of `--exclude-rect`. Specifies an exclusion rectangle using 0.0–1.0
+coordinates.
+
+Repeatable.
+
+### `--exclude-ellipse-rel rcx,rcy,rrx,rry`
+
+Relative coordinate variant of `--exclude-ellipse`. Specifies an exclusion ellipse using 0.0–1.0
+coordinates.
+
+Repeatable.
+
 ### `--lab-radius`
 
 Threshold radius for `--sample` mode.
@@ -92,6 +119,16 @@ Smaller values are stricter. Larger values include more neighboring hues.
 - `--auto-detect` combined with coordinate regions produces an intersection
 - `--sample` combined with coordinate regions also produces an intersection
 - `--sample-rel` follows the same intersection rule as `--sample`
+
+Exclude regions override all positive selection. The final mask is computed as:
+
+```
+final = positive AND NOT exclude
+```
+
+Exclude regions always win over positive/color-distance/region selections, regardless of how the
+positive mask was generated (`--mask`, `--rect`, `--ellipse`, `--auto-detect`, `--sample`, or any
+combination thereof).
 
 This combination is intentional. A color-based candidate set often needs human spatial
 guidance to become the intended subject.

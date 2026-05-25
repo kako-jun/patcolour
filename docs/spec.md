@@ -57,6 +57,27 @@ Samples a reference pixel from the input image and keeps nearby colors in Lab ch
 
 This is the current best-fit mode for "keep this hue family, even if brightness changes."
 
+### `--sample-rel rx,ry`
+
+Relative coordinate variant of `--sample`. Specifies the sample point in 0.0–1.0 coordinates,
+making it reusable across different image resolutions.
+
+When both `--sample` and `--sample-rel` are specified, `--sample-rel` takes priority.
+
+### `--rect-rel rx,ry,rw,rh`
+
+Relative coordinate variant of `--rect`. Specifies a rectangular region using 0.0–1.0
+coordinates, making it reusable across different image resolutions.
+
+Repeatable.
+
+### `--ellipse-rel rcx,rcy,rrx,rry`
+
+Relative coordinate variant of `--ellipse`. Specifies an elliptical region using 0.0–1.0
+coordinates, making it reusable across different image resolutions.
+
+Repeatable.
+
 ### `--lab-radius`
 
 Threshold radius for `--sample` mode.
@@ -67,8 +88,10 @@ Smaller values are stricter. Larger values include more neighboring hues.
 
 - `--mask` is exclusive in practice because it directly defines the mask
 - `--rect` and `--ellipse` are unioned together
+- `--rect-rel` and `--ellipse-rel` follow the same union rule and are merged with `--rect`/`--ellipse`
 - `--auto-detect` combined with coordinate regions produces an intersection
 - `--sample` combined with coordinate regions also produces an intersection
+- `--sample-rel` follows the same intersection rule as `--sample`
 
 This combination is intentional. A color-based candidate set often needs human spatial
 guidance to become the intended subject.

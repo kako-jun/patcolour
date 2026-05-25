@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from patcolour.filter import apply_partial_color
+from patcolour.filter import COLOR_SPACES, apply_color_space_comparison, apply_partial_color
 
 
 def _parse_rect(s: str) -> tuple[int, int, int, int]:
@@ -118,6 +118,17 @@ def main() -> None:
         help="Radius for --sample mode in Lab chroma space (default: 18.0)",
     )
     parser.add_argument(
+        "--color-space",
+        choices=COLOR_SPACES,
+        default="lab-chroma",
+        help="Color-distance mode for --sample/--sample-rel (default: lab-chroma)",
+    )
+    parser.add_argument(
+        "--compare-color-space",
+        action="store_true",
+        help="Run all 4 color-space modes and save individual images plus a collage.",
+    )
+    parser.add_argument(
         "--sample-rel",
         type=_parse_point_rel,
         metavar="rx,ry",
@@ -186,6 +197,12 @@ def main() -> None:
     )
 
     if args.input.is_dir():
+        if args.compare_color_space:
+            print(
+                "--compare-color-space is not available in batch (directory) mode",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         if not args.mask_dir:
             print("--mask-dir is required for batch processing", file=sys.stderr)
             sys.exit(1)
@@ -225,6 +242,25 @@ def main() -> None:
             print(f"{f.name} -> {out_path.name}")
     else:
         has_color_selection = args.auto_detect or args.sample or args.sample_rel
+        if args.compare_color_space:
+            if not args.sample and not args.sample_rel:
+                print(
+                    "--compare-color-space requires --sample or --sample-rel",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            out_dir = args.output or args.input.parent / f"{args.input.stem}_cs_compare"
+            paths = apply_color_space_comparison(
+                args.input,
+                out_dir,
+                sample_point=args.sample,
+                sample_point_rel=args.sample_rel,
+                lab_radius=args.lab_radius,
+                feather=args.feather,
+            )
+            for p in paths:
+                print(p.name)
+            return
         if not args.mask and not has_coords and not has_color_selection:
             print(
                 "--mask, --rect/--ellipse/--rect-rel/--ellipse-rel, "
@@ -243,6 +279,7 @@ def main() -> None:
             auto_detect=args.auto_detect,
             sample_point=args.sample,
             lab_radius=args.lab_radius,
+            color_space=args.color_space,
             sample_point_rel=args.sample_rel,
             rects_rel=args.rect_rel,
             ellipses_rel=args.ellipse_rel,

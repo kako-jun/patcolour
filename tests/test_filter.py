@@ -2,11 +2,18 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import pytest
 
 from patcolour.filter import (
+    COLOR_SPACES,
+    apply_color_space_comparison,
     apply_partial_color,
     detect_color_mask,
     detect_sample_color_mask,
+    detect_sample_color_mask_by_space,
+    detect_sample_color_mask_lab_full,
+    detect_sample_color_mask_lch,
+    detect_sample_color_mask_xyy,
     generate_exclude_mask,
     generate_region_mask,
     rel_to_abs_ellipse,
@@ -506,3 +513,229 @@ def test_apply_partial_color_exclude_rel_and_abs_are_unioned(tmp_path: Path) -> 
     assert result[9, 9, 0] == result[9, 9, 1] == result[9, 9, 2]
     # Middle (not excluded) → colored
     assert int(result[5, 5, 2]) != int(result[5, 5, 1])
+
+
+# ---------------------------------------------------------------------------
+# detect_sample_color_mask_lab_full
+# ---------------------------------------------------------------------------
+
+
+def _make_color_image(color_bgr: tuple[int, int, int]) -> np.ndarray:
+    """50x50 image filled with color_bgr with a small colored rectangle."""
+    img = np.zeros((50, 50, 3), dtype=np.uint8)
+    img[:, :] = color_bgr
+    return img
+
+
+def test_detect_sample_color_mask_lab_full_returns_mask() -> None:
+    img = _make_color_image((0, 200, 0))
+    mask = detect_sample_color_mask_lab_full(img, (25, 25))
+
+    assert mask.dtype == np.uint8
+    assert mask.shape == img.shape[:2]
+
+
+def test_detect_sample_color_mask_lab_full_range() -> None:
+    img = _make_color_image((0, 200, 0))
+    img[10:20, 10:20] = (0, 0, 200)
+    mask = detect_sample_color_mask_lab_full(img, (25, 25))
+
+    unique = np.unique(mask)
+    assert set(unique.tolist()).issubset({0, 255})
+
+
+def test_detect_sample_color_mask_lab_full_selects_similar_color() -> None:
+    img = _make_color_image((0, 200, 0))
+    mask = detect_sample_color_mask_lab_full(img, (25, 25), lab_radius=5.0)
+
+    # Solid same color → entire image should be selected
+    assert np.all(mask == 255)
+
+
+# ---------------------------------------------------------------------------
+# detect_sample_color_mask_lch
+# ---------------------------------------------------------------------------
+
+
+def test_detect_sample_color_mask_lch_returns_mask() -> None:
+    img = _make_color_image((0, 200, 0))
+    mask = detect_sample_color_mask_lch(img, (25, 25))
+
+    assert mask.dtype == np.uint8
+    assert mask.shape == img.shape[:2]
+
+
+def test_detect_sample_color_mask_lch_selects_same_hue_different_brightness() -> None:
+    # Same green hue, two brightness levels
+    img = np.zeros((50, 50, 3), dtype=np.uint8)
+    img[0:25, :] = (0, 200, 0)   # bright green
+    img[25:, :] = (0, 150, 0)    # slightly darker green (same hue)
+
+    # Sample from bright green region; with large radius, darker green should be selected
+    mask = detect_sample_color_mask_lch(img, (25, 12), lch_radius=50.0, lightness_weight=0.3)
+
+    # With low lightness_weight and large radius, darker green should also be selected
+    assert mask[37, 25] == 255
+
+
+# ---------------------------------------------------------------------------
+# detect_sample_color_mask_xyy
+# ---------------------------------------------------------------------------
+
+
+def test_detect_sample_color_mask_xyy_returns_mask() -> None:
+    img = _make_color_image((0, 200, 0))
+    mask = detect_sample_color_mask_xyy(img, (25, 25))
+
+    assert mask.dtype == np.uint8
+    assert mask.shape == img.shape[:2]
+
+
+def test_detect_sample_color_mask_xyy_range() -> None:
+    img = _make_color_image((0, 200, 0))
+    img[10:20, 10:20] = (0, 0, 200)
+    mask = detect_sample_color_mask_xyy(img, (25, 25))
+
+    unique = np.unique(mask)
+    assert set(unique.tolist()).issubset({0, 255})
+
+
+def test_detect_sample_color_mask_xyy_zero_division_safe() -> None:
+    # Black pixel (0,0,0) causes total=0 in XYZ; must not crash
+    img = _make_color_image((0, 200, 0))
+    img[0, 0] = (0, 0, 0)
+
+    # Should not raise
+    mask = detect_sample_color_mask_xyy(img, (25, 25))
+
+    assert mask is not None
+
+
+# ---------------------------------------------------------------------------
+# detect_sample_color_mask_by_space
+# ---------------------------------------------------------------------------
+
+
+def test_detect_sample_color_mask_by_space_lab_chroma() -> None:
+    img = _make_color_image((0, 200, 0))
+    expected = detect_sample_color_mask(img, (25, 25), lab_radius=18.0)
+    result = detect_sample_color_mask_by_space(img, (25, 25), color_space="lab-chroma")
+
+    np.testing.assert_array_equal(result, expected)
+
+
+def test_detect_sample_color_mask_by_space_lab_full() -> None:
+    img = _make_color_image((0, 200, 0))
+    mask = detect_sample_color_mask_by_space(img, (25, 25), color_space="lab-full")
+
+    assert mask.dtype == np.uint8
+    assert mask.shape == img.shape[:2]
+
+
+def test_detect_sample_color_mask_by_space_lch() -> None:
+    img = _make_color_image((0, 200, 0))
+    mask = detect_sample_color_mask_by_space(img, (25, 25), color_space="lch")
+
+    assert mask.dtype == np.uint8
+    assert mask.shape == img.shape[:2]
+
+
+def test_detect_sample_color_mask_by_space_xyy() -> None:
+    img = _make_color_image((0, 200, 0))
+    mask = detect_sample_color_mask_by_space(img, (25, 25), color_space="xyy")
+
+    assert mask.dtype == np.uint8
+    assert mask.shape == img.shape[:2]
+
+
+def test_detect_sample_color_mask_by_space_invalid_raises() -> None:
+    img = _make_color_image((0, 200, 0))
+
+    with pytest.raises(ValueError, match="Unknown color_space"):
+        detect_sample_color_mask_by_space(img, (25, 25), color_space="unknown-mode")
+
+
+# ---------------------------------------------------------------------------
+# apply_partial_color — color_space argument
+# ---------------------------------------------------------------------------
+
+
+def test_apply_partial_color_color_space_default_is_lab_chroma(tmp_path: Path) -> None:
+    img = _make_color_image((0, 200, 0))
+    input_path = tmp_path / "input.png"
+    output_path = tmp_path / "output.png"
+    _write_image(input_path, img)
+
+    # No color_space specified → should use default "lab-chroma" without error
+    apply_partial_color(input_path, output_path, sample_point=(25, 25))
+
+    assert output_path.exists()
+
+
+def test_apply_partial_color_color_space_all_modes_produce_output(tmp_path: Path) -> None:
+    img = _make_color_image((0, 200, 0))
+    input_path = tmp_path / "input.png"
+    _write_image(input_path, img)
+
+    for cs in COLOR_SPACES:
+        output_path = tmp_path / f"output_{cs}.png"
+        apply_partial_color(input_path, output_path, sample_point=(25, 25), color_space=cs)
+        assert output_path.exists(), f"Output missing for color_space={cs!r}"
+
+
+# ---------------------------------------------------------------------------
+# apply_color_space_comparison
+# ---------------------------------------------------------------------------
+
+
+def test_apply_color_space_comparison_returns_five_paths(tmp_path: Path) -> None:
+    img = _make_color_image((0, 200, 0))
+    input_path = tmp_path / "input.png"
+    _write_image(input_path, img)
+
+    paths = apply_color_space_comparison(input_path, tmp_path / "out", sample_point=(25, 25))
+
+    assert len(paths) == 5
+
+
+def test_apply_color_space_comparison_all_files_exist(tmp_path: Path) -> None:
+    img = _make_color_image((0, 200, 0))
+    input_path = tmp_path / "input.png"
+    _write_image(input_path, img)
+
+    paths = apply_color_space_comparison(input_path, tmp_path / "out", sample_point=(25, 25))
+
+    for p in paths:
+        assert p.exists(), f"File missing: {p}"
+
+
+def test_apply_color_space_comparison_collage_name(tmp_path: Path) -> None:
+    img = _make_color_image((0, 200, 0))
+    input_path = tmp_path / "input.png"
+    _write_image(input_path, img)
+
+    paths = apply_color_space_comparison(input_path, tmp_path / "out", sample_point=(25, 25))
+
+    collage = paths[-1]
+    assert collage.name == "input_cs_compare.png"
+
+
+def test_apply_color_space_comparison_no_sample_raises(tmp_path: Path) -> None:
+    img = _make_color_image((0, 200, 0))
+    input_path = tmp_path / "input.png"
+    _write_image(input_path, img)
+
+    with pytest.raises(ValueError, match="sample_point"):
+        apply_color_space_comparison(input_path, tmp_path / "out")
+
+
+def test_apply_color_space_comparison_collage_width_le_4000(tmp_path: Path) -> None:
+    img = _make_color_image((0, 200, 0))
+    input_path = tmp_path / "input.png"
+    _write_image(input_path, img)
+
+    paths = apply_color_space_comparison(input_path, tmp_path / "out", sample_point=(25, 25))
+
+    collage = cv2.imread(str(paths[-1]))
+    assert collage is not None
+    assert collage.shape[1] <= 4000

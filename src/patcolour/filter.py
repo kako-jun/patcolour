@@ -169,9 +169,10 @@ def detect_sample_color_mask_xyy(
     Y = xyz[:, :, 1]
     Z = xyz[:, :, 2]
     total = X + Y + Z
+    safe_total = np.where(total > 0, total, 1.0)  # avoid division by zero
 
-    cx = np.where(total > 0, X / total, 0.0)
-    cy = np.where(total > 0, Y / total, 0.0)
+    cx = np.where(total > 0, X / safe_total, 0.0)
+    cy = np.where(total > 0, Y / safe_total, 0.0)
 
     target_xyz = xyz[y, x]
     tX, tY, tZ = target_xyz[0], target_xyz[1], target_xyz[2]
@@ -293,7 +294,7 @@ def apply_partial_color(
     - mask_path: Use an external mask image.
     - rects/ellipses: Spatial region selection.
     - auto_detect: Auto-detect colorful regions (HSV).
-    - sample_point: Sample a reference pixel and keep nearby Lab chroma colors.
+    - sample_point: Sample a reference pixel and keep nearby colors (see color_space).
 
     When a color-selection mode (`auto_detect` or `sample_point`) is combined with
     rects/ellipses, the final mask is the intersection: only pixels that are BOTH selected by

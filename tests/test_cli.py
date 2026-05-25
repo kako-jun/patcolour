@@ -121,12 +121,18 @@ def test_cli_exclude_rect_passed_to_apply(tmp_path: Path) -> None:
 
     with patch("patcolour.cli.apply_partial_color") as mock_apply:
         mock_apply.return_value = None
-        with patch.object(sys, "argv", [
-            "patcolour",
-            str(input_path),
-            "--rect", "0,0,10,10",
-            "--exclude-rect", "3,3,4,4",
-        ]):
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "patcolour",
+                str(input_path),
+                "--rect",
+                "0,0,10,10",
+                "--exclude-rect",
+                "3,3,4,4",
+            ],
+        ):
             main()
 
     mock_apply.assert_called_once()
@@ -142,12 +148,18 @@ def test_cli_exclude_rect_rel_passed_to_apply(tmp_path: Path) -> None:
 
     with patch("patcolour.cli.apply_partial_color") as mock_apply:
         mock_apply.return_value = None
-        with patch.object(sys, "argv", [
-            "patcolour",
-            str(input_path),
-            "--rect", "0,0,10,10",
-            "--exclude-rect-rel", "0.3,0.3,0.4,0.4",
-        ]):
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "patcolour",
+                str(input_path),
+                "--rect",
+                "0,0,10,10",
+                "--exclude-rect-rel",
+                "0.3,0.3,0.4,0.4",
+            ],
+        ):
             main()
 
     mock_apply.assert_called_once()
@@ -164,11 +176,93 @@ def test_cli_exclude_rect_alone_satisfies_has_coords(tmp_path: Path) -> None:
 
     with patch("patcolour.cli.apply_partial_color") as mock_apply:
         mock_apply.return_value = None
-        with patch.object(sys, "argv", [
-            "patcolour",
-            str(input_path),
-            "--exclude-rect", "3,3,4,4",
-        ]):
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "patcolour",
+                str(input_path),
+                "--exclude-rect",
+                "3,3,4,4",
+            ],
+        ):
             main()  # must not raise SystemExit
 
     mock_apply.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# CLI integration tests — color-space and compare-color-space
+# ---------------------------------------------------------------------------
+
+
+def test_cli_color_space_passed_to_apply(tmp_path: Path) -> None:
+    img = np.zeros((10, 10, 3), dtype=np.uint8)
+    img[:, :] = (0, 200, 0)
+    input_path = tmp_path / "input.png"
+    _write_image(input_path, img)
+
+    with patch("patcolour.cli.apply_partial_color") as mock_apply:
+        mock_apply.return_value = None
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "patcolour",
+                str(input_path),
+                "--sample",
+                "5,5",
+                "--color-space",
+                "lch",
+            ],
+        ):
+            main()
+
+    mock_apply.assert_called_once()
+    _, kwargs = mock_apply.call_args
+    assert kwargs.get("color_space") == "lch"
+
+
+def test_cli_compare_color_space_calls_apply_comparison(tmp_path: Path) -> None:
+    img = np.zeros((10, 10, 3), dtype=np.uint8)
+    img[:, :] = (0, 200, 0)
+    input_path = tmp_path / "input.png"
+    _write_image(input_path, img)
+
+    fake_paths = [tmp_path / f"out_{i}.png" for i in range(5)]
+
+    with patch("patcolour.cli.apply_color_space_comparison", return_value=fake_paths) as mock_cmp:
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "patcolour",
+                str(input_path),
+                "--sample",
+                "5,5",
+                "--compare-color-space",
+            ],
+        ):
+            main()
+
+    mock_cmp.assert_called_once()
+
+
+def test_cli_compare_color_space_without_sample_exits(tmp_path: Path) -> None:
+    img = np.zeros((10, 10, 3), dtype=np.uint8)
+    input_path = tmp_path / "input.png"
+    _write_image(input_path, img)
+
+    with patch.object(
+        sys,
+        "argv",
+        [
+            "patcolour",
+            str(input_path),
+            "--compare-color-space",
+        ],
+    ):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+    assert exc_info.value.code == 1

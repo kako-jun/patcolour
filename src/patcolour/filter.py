@@ -94,6 +94,121 @@ def detect_sample_color_mask(
     return mask
 
 
+def detect_sample_color_mask_lab_full(
+    img: np.ndarray,
+    sample_point: tuple[int, int],
+    lab_radius: float = 18.0,
+) -> np.ndarray:
+    """Lab full 3D distance (L + a + b)."""
+    x, y = sample_point
+    height, width = img.shape[:2]
+    if not (0 <= x < width and 0 <= y < height):
+        msg = f"sample point out of bounds: {(x, y)} for image {width}x{height}"
+        raise ValueError(msg)
+
+    lab = cv2.cvtColor(img.astype(np.float32) / 255.0, cv2.COLOR_BGR2Lab)
+    target = lab[y, x]
+
+    distance = np.linalg.norm(lab - target, axis=2)
+    mask = np.where(distance <= lab_radius, 255, 0).astype(np.uint8)
+    return mask
+
+
+def detect_sample_color_mask_lch(
+    img: np.ndarray,
+    sample_point: tuple[int, int],
+    lch_radius: float = 18.0,
+    lightness_weight: float = 0.3,
+) -> np.ndarray:
+    """LCh distance with downweighted lightness."""
+    x, y = sample_point
+    height, width = img.shape[:2]
+    if not (0 <= x < width and 0 <= y < height):
+        msg = f"sample point out of bounds: {(x, y)} for image {width}x{height}"
+        raise ValueError(msg)
+
+    lab = cv2.cvtColor(img.astype(np.float32) / 255.0, cv2.COLOR_BGR2Lab)
+    target = lab[y, x]
+
+    L = lab[:, :, 0]
+    a = lab[:, :, 1]
+    b = lab[:, :, 2]
+    tL, ta, tb = target[0], target[1], target[2]
+
+    C = np.sqrt(a**2 + b**2)
+    h = np.degrees(np.arctan2(b, a))
+    tC = np.sqrt(ta**2 + tb**2)
+    th = np.degrees(np.arctan2(tb, ta))
+
+    dL = L - tL
+    dC = C - tC
+    dh_raw = np.abs(h - th)
+    dh_norm = np.minimum(dh_raw, 360.0 - dh_raw) / 180.0
+
+    distance = np.sqrt((lightness_weight * dL) ** 2 + dC**2 + dh_norm**2)
+    mask = np.where(distance <= lch_radius, 255, 0).astype(np.uint8)
+    return mask
+
+
+def detect_sample_color_mask_xyy(
+    img: np.ndarray,
+    sample_point: tuple[int, int],
+    xyy_radius: float = 0.05,
+) -> np.ndarray:
+    """xyY chromaticity distance (ignores luminance Y)."""
+    x, y = sample_point
+    height, width = img.shape[:2]
+    if not (0 <= x < width and 0 <= y < height):
+        msg = f"sample point out of bounds: {(x, y)} for image {width}x{height}"
+        raise ValueError(msg)
+
+    img_f = img.astype(np.float32) / 255.0
+    xyz = cv2.cvtColor(img_f, cv2.COLOR_BGR2XYZ)
+
+    X = xyz[:, :, 0]
+    Y = xyz[:, :, 1]
+    Z = xyz[:, :, 2]
+    total = X + Y + Z
+    safe_total = np.where(total > 0, total, 1.0)  # avoid division by zero
+
+    cx = np.where(total > 0, X / safe_total, 0.0)
+    cy = np.where(total > 0, Y / safe_total, 0.0)
+
+    target_xyz = xyz[y, x]
+    tX, tY, tZ = target_xyz[0], target_xyz[1], target_xyz[2]
+    t_total = tX + tY + tZ
+    tcx = tX / t_total if t_total > 0 else 0.0
+    tcy = tY / t_total if t_total > 0 else 0.0
+
+    distance = np.sqrt((cx - tcx) ** 2 + (cy - tcy) ** 2)
+    mask = np.where(distance <= xyy_radius, 255, 0).astype(np.uint8)
+    return mask
+
+
+COLOR_SPACES = ["lab-chroma", "lab-full", "lch", "xyy"]
+
+
+def detect_sample_color_mask_by_space(
+    img: np.ndarray,
+    sample_point: tuple[int, int],
+    color_space: str = "lab-chroma",
+    lab_radius: float = 18.0,
+) -> np.ndarray:
+    """Dispatch to the appropriate color-distance function."""
+    if color_space == "lab-chroma":
+        return detect_sample_color_mask(img, sample_point, lab_radius=lab_radius)
+    elif color_space == "lab-full":
+        return detect_sample_color_mask_lab_full(img, sample_point, lab_radius=lab_radius)
+    elif color_space == "lch":
+        return detect_sample_color_mask_lch(img, sample_point, lch_radius=lab_radius)
+    elif color_space == "xyy":
+        xyy_radius = lab_radius / 360.0
+        return detect_sample_color_mask_xyy(img, sample_point, xyy_radius=xyy_radius)
+    else:
+        msg = f"Unknown color_space: {color_space!r}. Must be one of {COLOR_SPACES}"
+        raise ValueError(msg)
+
+
 def _draw_regions(
     height: int,
     width: int,
@@ -164,6 +279,7 @@ def apply_partial_color(
     auto_detect: bool = False,
     sample_point: tuple[int, int] | None = None,
     lab_radius: float = 18.0,
+    color_space: str = "lab-chroma",
     sample_point_rel: tuple[float, float] | None = None,
     rects_rel: list[tuple[float, float, float, float]] | None = None,
     ellipses_rel: list[tuple[float, float, float, float]] | None = None,
@@ -178,7 +294,7 @@ def apply_partial_color(
     - mask_path: Use an external mask image.
     - rects/ellipses: Spatial region selection.
     - auto_detect: Auto-detect colorful regions (HSV).
-    - sample_point: Sample a reference pixel and keep nearby Lab chroma colors.
+    - sample_point: Sample a reference pixel and keep nearby colors (see color_space).
 
     When a color-selection mode (`auto_detect` or `sample_point`) is combined with
     rects/ellipses, the final mask is the intersection: only pixels that are BOTH selected by
@@ -218,7 +334,9 @@ def apply_partial_color(
             mask = cv2.resize(mask, (w, h))
     elif auto_detect or sample_point is not None:
         if sample_point is not None:
-            color_mask = detect_sample_color_mask(img, sample_point, lab_radius=lab_radius)
+            color_mask = detect_sample_color_mask_by_space(
+                img, sample_point, color_space=color_space, lab_radius=lab_radius
+            )
         else:
             color_mask = detect_color_mask(img)
         color_mask = _apply_feather(color_mask, feather)
@@ -250,3 +368,64 @@ def apply_partial_color(
     result = np.clip(result, 0, 255).astype(np.uint8)
 
     cv2.imwrite(str(output_path), result)
+
+
+def apply_color_space_comparison(
+    input_path: Path,
+    output_dir: Path,
+    sample_point: tuple[int, int] | None = None,
+    sample_point_rel: tuple[float, float] | None = None,
+    lab_radius: float = 18.0,
+    feather: int = 0,
+) -> list[Path]:
+    """Run all 4 color-space modes and save individual images plus a collage."""
+    if sample_point is None and sample_point_rel is None:
+        msg = "Either sample_point or sample_point_rel must be specified"
+        raise ValueError(msg)
+
+    img = cv2.imread(str(input_path))
+    if img is None:
+        msg = f"Could not read image: {input_path}"
+        raise ValueError(msg)
+
+    h, w = img.shape[:2]
+
+    if sample_point_rel is not None:
+        sample_point = rel_to_abs_point(sample_point_rel[0], sample_point_rel[1], w, h)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    stem = input_path.stem
+
+    saved_paths: list[Path] = []
+    result_images: list[np.ndarray] = []
+
+    for cs in COLOR_SPACES:
+        out_path = output_dir / f"{stem}_cs_{cs}.png"
+        apply_partial_color(
+            input_path,
+            out_path,
+            sample_point=sample_point,
+            lab_radius=lab_radius,
+            color_space=cs,
+            feather=feather,
+        )
+        saved_paths.append(out_path)
+        result_img = cv2.imread(str(out_path))
+        result_images.append(result_img)
+
+    # Build collage (4 columns, max 4000px wide)
+    max_collage_width = 4000
+    col_width = min(w, max_collage_width // 4)
+    col_height = round(h * col_width / w) if w > 0 else h
+
+    cols = []
+    for ri in result_images:
+        resized = cv2.resize(ri, (col_width, col_height))
+        cols.append(resized)
+
+    collage = np.concatenate(cols, axis=1)
+    collage_path = output_dir / f"{stem}_cs_compare.png"
+    cv2.imwrite(str(collage_path), collage)
+    saved_paths.append(collage_path)
+
+    return saved_paths
